@@ -6,7 +6,7 @@ const uuidV4 = require('uuid/v4');
 
 class HARDWARE {
     constructor(pc) {
-        this.pc = pc;
+        this._pc = pc;
     }
 }
 
@@ -70,7 +70,7 @@ class RAM extends HARDWARE {
                 this.use_apps[app_id] = size;
             }
         } else {
-            this.pc.os.runningApps[app_id].exit('Error: RAM is full, program exit.');
+            this._pc.os.runningApps[app_id].exit('Error: RAM is full, program exit.');
         }
     }
 
@@ -87,19 +87,19 @@ class RAM extends HARDWARE {
 
 class SOFTWARE {
     constructor(pc, args, output) {
-        this.pc = pc;
-        this.status = true;
+        this._pc = pc;
+        this._status = true;
         this.args = args;
-        this.output = output;
-        this.index = uuidV4();
-        this.start_time = Date.now();
-        this.version = '1.0';
+        this._output = output;
+        this._index = uuidV4();
+        this._start_time = Date.now();
+        this._version = '1.0';
     }
 
     base() {
         let self = this;
         this.findArg('--version', param => self.echoVersion() );
-        this.findArg('-v', param => self.echoVersion() );
+        this.findArg('--help', param => self.echoHelp() );
     }
 
     init() {
@@ -124,56 +124,90 @@ class SOFTWARE {
     }
 
     echoVersion() {
-        this.output(['echo', this.version]);
+        this._output(['echo', this._version]);
+        this.exit();
+    }
+
+    echoHelp() {
+        this._output(['echo', '--version          Show Version']);
+        this._output(['echo', '--help             Show Help']);
         this.exit();
     }
 
     echo(msg) {
-        this.output(['echo', msg]);
+        this._output(['echo', msg]);
     }
 
     exit(error) {
-        this.status = false;
-        this.output(['exit', error || 0]);
+        this._status = false;
+        this._output(['exit', error || 0]);
         this.ramClear();
-        delete this.pc.os.runningApps[this.index];
+        delete this._pc.os.runningApps[this._index];
     }
 
     ramAdd(size) {
-        this.pc.ram.add(this.index, size);
+        this._pc.ram.add(this._index, size);
     }
 
     ramRemove(size) {
-        this.pc.ram.remove(this.index, size);
+        this._pc.ram.remove(this._index, size);
     }
 
     ramClear() {
-        this.pc.ram.clear(this.index);
+        this._pc.ram.clear(this._index);
     }
 
     addTask(cycles, callback) {
-        this.pc.cpu.addTask(this.index, cycles, callback);
+        this._pc.cpu.addTask(this._index, cycles, callback);
     }
 }
 
 class CMD_HI extends SOFTWARE {
     init() {
+        let self = this;
         this.ramAdd(1000);
+
+        this.name = null;
+
+        this.findArg('--name' , param => self.name = param);
     }
 
     main() {
         let self = this;
-        this.echo('hello world');
+        if(this.name) {
+            this.echo(`Hello ${this.name}`);
+        } else {
+            this.echo('Hello world');
+        }
         this.addTask(5, () => {
-            self.echo('hello world after 5 cycles');
-            self.exit();
+            self.echo('End 5 cycles');
+            this.exit();
         });
+        this.addTask(2, () => {
+            self.echo('End 2 cycles');
+        });
+        this.addTask(4, () => {
+            self.echo('End 4 cycles');
+        });
+        this.addTask(2, () => {
+            self.echo('End 2 cycles');
+        });
+        this.addTask(4, () => {
+            self.echo('End 4 cycles');
+        });
+    }
+
+    echoHelp() {
+        this._output(['echo', '--version          Show Version']);
+        this._output(['echo', '--help             Show Help']);
+        this._output(['echo', '--name             Hello {Name}']);
+        this.exit();
     }
 }
 
 class OS {
     constructor(pc) {
-        this.pc = pc;
+        this._pc = pc;
         this.wss_server = http.createServer();
         this.wss = new WebSocket.Server({ server: this.wss_server });
         this.wss.on('connection', this.new_terminal());
@@ -184,7 +218,7 @@ class OS {
         };
         this.runningApps = {};
 
-        this.pc.ram.add('system', 197321);
+        this._pc.ram.add('system', 197321);
     }
 
     new_terminal() {
@@ -213,12 +247,12 @@ class OS {
         let args = cmd.split(" ");
         if (this.softwares[args[0]]) {
             let software = this.softwares[args[0]];
-            let app = new software(this.pc, args, output);
-            this.runningApps[app.index] = app;
-            output(['set_app', app.index]);
+            let app = new software(this._pc, args, output);
+            this.runningApps[app._index] = app;
+            output(['set_app', app._index]);
             app.init();
-            if (app.status) app.base();
-            if (app.status) app.main();
+            if (app._status) app.base();
+            if (app._status) app.main();
         } else {
             output(['echo',`Command ${args[0]} not found`]);
             output(['exit', 0]);
@@ -229,7 +263,7 @@ class OS {
 
 class PC {
     constructor() {
-        this.cpu = new CPU(this, 2, false, 2.6);
+        this.cpu = new CPU(this, 2, true, 2.6);
         this.ram = new RAM(this, 2000000);
         this.os = new OS(this);
     }
