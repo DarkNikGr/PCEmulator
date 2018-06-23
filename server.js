@@ -93,6 +93,13 @@ class SOFTWARE {
         this.output = output;
         this.index = uuidV4();
         this.start_time = Date.now();
+        this.version = '1.0';
+    }
+
+    base() {
+        let self = this;
+        this.findArg('--version', param => self.echoVersion() );
+        this.findArg('-v', param => self.echoVersion() );
     }
 
     init() {
@@ -100,6 +107,24 @@ class SOFTWARE {
     }
 
     main() {
+        this.exit();
+    }
+
+    findArg(arg, callback) {
+        for(let arg_index in this.args) {
+            let index = parseInt(arg_index);
+            if (arg === this.args[index]) {
+                if (typeof this.args[index + 1] !== "undefined" && !this.args[index + 1].startsWith('-') ) {
+                    callback(this.args[index + 1]);
+                } else {
+                    callback(null);
+                }
+            }
+        }
+    }
+
+    echoVersion() {
+        this.output(['echo', this.version]);
         this.exit();
     }
 
@@ -123,7 +148,7 @@ class SOFTWARE {
     }
 
     ramClear() {
-        this.pc.ram.remove(this.index);
+        this.pc.ram.clear(this.index);
     }
 
     addTask(cycles, callback) {
@@ -177,7 +202,7 @@ class OS {
                     if (data[1] === 0) {
                         self.cmd(data[2], output);
                     } else {
-                        this.runningApps[data[1]].res = data[2];
+
                     }
                 }
             });
@@ -190,8 +215,9 @@ class OS {
             let software = this.softwares[args[0]];
             let app = new software(this.pc, args, output);
             this.runningApps[app.index] = app;
-            app.init();
             output(['set_app', app.index]);
+            app.init();
+            if (app.status) app.base();
             if (app.status) app.main();
         } else {
             output(['echo',`Command ${args[0]} not found`]);
