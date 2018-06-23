@@ -1,5 +1,6 @@
 const http = require('http');
 const WebSocket = require('ws');
+const queue = require('async/queue');
 const uuidV1 = require('uuid/v1');
 const uuidV4 = require('uuid/v4');
 
@@ -10,8 +11,39 @@ class HARDWARE {
 }
 
 class CPU extends HARDWARE {
-    constructor(pc) {
+    constructor(pc, cores, hyperThreading, speed) {
         super(pc);
+
+        this.workers = cores;
+        if (hyperThreading) this.workers *= 2;
+
+        this.cycleDelay = 1000/speed;
+
+        this.q = queue(this.cycle(), this.workers);
+    }
+
+    cycle() {
+        const self = this;
+        return (task, callback) => {
+            setTimeout( () => {
+                task.cycles--;
+                if (task.cycles === 0) {
+                    task.callback();
+                } else {
+                    let c = callback;
+                    self.q.push(task);
+                }
+                callback();
+            }, self.cycleDelay);
+        }
+    }
+
+    addTask(appID, cycles, callback) {
+        this.q.push({
+            appID,
+            cycles,
+            callback
+        });
     }
 }
 
@@ -26,7 +58,7 @@ class RAM extends HARDWARE {
     use() {
         let total = 0;
         for (let key in this.use_apps){
-            this.use_apps[key] += value;
+            total += this.use_apps[key];
         }
         return total
     }
@@ -72,7 +104,6 @@ class OS {
                     if (data[1] === 0) {
                         pc.os.cmd(data[2], output);
                     } else {
-                        console.log(this.runningApps[data[1]].res);
                         this.runningApps[data[1]].res = data[2];
                     }
                 }
@@ -136,24 +167,32 @@ class SOFTWARE {
     ramAdd(size) {
         this.pc.ram.add(this.index, size);
     }
+
+    addTask(cycles, callback) {
+        this.pc.cpu.addTask(this.index, cycles, callback);
+    }
 }
 
 class CMD_HI extends SOFTWARE {
     init() {
-        this.ramAdd(3000000);
+        this.ramAdd(1000);
     }
 
     main() {
+        let self = this;
         this.echo('hello world');
-        this.exit();
+        this.addTask(5, () => {
+            self.echo('hello world after 5 cycles');
+            self.exit();
+        });
     }
 }
 
 
 class PC {
     constructor(softwares) {
-        this.cpu = new CPU(this);
-        this.ram = new RAM(this);
+        this.cpu = new CPU(this, 2, false, 3.4);
+        this.ram = new RAM(this, 2000000);
         this.os = new OS(this);
         this.softwares = softwares || {
             hi: CMD_HI
