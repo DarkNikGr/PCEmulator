@@ -73,6 +73,16 @@ class RAM extends HARDWARE {
             this.pc.os.runningApps[app_id].exit('Error: RAM is full, program exit.');
         }
     }
+
+    remove(app_id, size) {
+        if (this.use_apps[app_id]) {
+            this.use_apps[app_id] -= size;
+        }
+    }
+
+    clear(app_id) {
+        delete this.use_apps[app_id];
+    }
 }
 
 class SOFTWARE {
@@ -100,12 +110,20 @@ class SOFTWARE {
     exit(error) {
         this.status = false;
         this.output(['exit', error || 0]);
-        delete this.pc.ram.use_apps[this.index];
+        this.ramClear();
         delete this.pc.os.runningApps[this.index];
     }
 
     ramAdd(size) {
         this.pc.ram.add(this.index, size);
+    }
+
+    ramRemove(size) {
+        this.pc.ram.remove(this.index, size);
+    }
+
+    ramClear() {
+        this.pc.ram.remove(this.index);
     }
 
     addTask(cycles, callback) {
