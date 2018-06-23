@@ -27,8 +27,9 @@ class CPU extends HARDWARE {
         return (task, callback) => {
             setTimeout( () => {
                 task.cycles--;
+                if (typeof task.step === 'function') task.step(task);
                 if (task.cycles === 0) {
-                    task.callback();
+                    task.callback(task);
                 } else {
                     self.q.push(task);
                 }
@@ -37,11 +38,12 @@ class CPU extends HARDWARE {
         }
     }
 
-    addTask(appID, cycles, callback) {
+    addTask(appID, cycles, callback, step) {
         this.q.push({
             appID,
             cycles,
-            callback
+            callback,
+            step
         });
     }
 }
@@ -157,8 +159,8 @@ class SOFTWARE {
         this._pc.ram.clear(this._index);
     }
 
-    addTask(cycles, callback) {
-        this._pc.cpu.addTask(this._index, cycles, callback);
+    addTask(cycles, callback, step) {
+        this._pc.cpu.addTask(this._index, cycles, callback, step);
     }
 }
 
@@ -179,20 +181,22 @@ class CMD_HI extends SOFTWARE {
         } else {
             this.echo('Hello world');
         }
-        this.addTask(5, () => {
+        this.addTask(5, task => {
             self.echo('End 5 cycles');
             this.exit();
+        }, task => {
+            self.echo(`5 cycles task step remaining ${task.cycles}`);
         });
-        this.addTask(2, () => {
+        this.addTask(2, task => {
             self.echo('End 2 cycles');
         });
-        this.addTask(4, () => {
+        this.addTask(4, task => {
             self.echo('End 4 cycles');
         });
-        this.addTask(2, () => {
+        this.addTask(2, task => {
             self.echo('End 2 cycles');
         });
-        this.addTask(4, () => {
+        this.addTask(4, task => {
             self.echo('End 4 cycles');
         });
     }
